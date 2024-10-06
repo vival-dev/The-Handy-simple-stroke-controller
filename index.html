@@ -158,28 +158,34 @@
             return buf;
         };
 
-        function onMouseMove(event) {
+        function onMove(event) {
             if (isDragging) {
-                const x = event.clientX - containerRect.left - sliderRect.width / 2;
-                const y = event.clientY - containerRect.top - sliderRect.height / 2;
+                const clientX = event.clientX || event.touches[0].clientX; // タッチの位置を取得
+                const clientY = event.clientY || event.touches[0].clientY; // タッチの位置を取得
+                const x = clientX - containerRect.left - sliderRect.width / 2;
+                const y = clientY - containerRect.top - sliderRect.height / 2;
                 updatePosition(x, y);
             }
         }
 
-        function onMouseDown(event) {
+        function onStart(event) {
             isDragging = true;
+            onMove(event); // 初期位置を更新
         }
 
-        function onMouseUp(event) {
+        function onEnd(event) {
             isDragging = false;
             setHampVelocity(CONNECTION_KEY, x_buf);
             setSlide(CONNECTION_KEY, y_buf[1], y_buf[2]);
         }
 
         // スライダーのドラッグを設定
-        slider.addEventListener('mousedown', onMouseDown);
-        document.addEventListener('mouseup', onMouseUp);
-        document.addEventListener('mousemove', onMouseMove);
+        slider.addEventListener('mousedown', onStart);
+        slider.addEventListener('touchstart', onStart); // タッチイベント追加
+        document.addEventListener('mouseup', onEnd);
+        document.addEventListener('touchend', onEnd); // タッチ終了イベント追加
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('touchmove', onMove); // タッチ移動イベント追加
         
     });
     
