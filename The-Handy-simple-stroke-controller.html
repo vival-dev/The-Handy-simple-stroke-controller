@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>simple controller</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        .slider-container {
+            position: relative;
+            width: 300px;
+            height: 300px;
+            border: 1px solid #000;
+        }
+
+        .slider {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background-color: red;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
+        .coordinates {
+            margin-top: 20px;
+        }
+        
+        .horizontal-line {
+            position: absolute;
+            top: 50%; /* 中央に配置 */
+            left: 0;
+            width: 100%;
+            height: 2px; /* 線の太さ */
+            background-color: rgba(200, 200, 200, 0.5); /* グレーの色 */
+            transform: translateY(-50%); /* 中央揃え */
+        }
+        
+        button {
+            margin: 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="form-group">
+    <label for="inputField">Handy Key:</label>
+    <input type="text" id="inputField" placeholder="input here">
+</div>
+    <div class="slider-container" id="slider-container">
+        <div class="horizontal-line"></div> <!-- 横線を追加 -->
+        <div class="slider" id="slider"></div>
+    </div>
+    <div class="coordinates">
+        <p>Speed: <span id="x-value">0</span></p>
+        <p>Stroke area: <span id="y-value">0</span></p>
+    </div>
+    
+    <button id="button1">start</button>
+    <button id="button2">stop</button>
+
+<script>
+    let CONNECTION_KEY = "YOUR_CONNECTION_KEY";
+    
+    document.getElementById('button1').addEventListener('click', function() {
+        startHamp(CONNECTION_KEY);
+    });
+
+    document.getElementById('button2').addEventListener('click', function() {
+        stopHamp(CONNECTION_KEY);
+    });
+
+    document.getElementById('inputField').addEventListener('input', function() {
+        const inputValue = this.value;
+        CONNECTION_KEY = inputValue;
+        setHampMode(CONNECTION_KEY);
+    });
+    
+    document.addEventListener('DOMContentLoaded', function() {
+        const slider = document.getElementById('slider');
+        const container = document.getElementById('slider-container');
+        const xValue = document.getElementById('x-value');
+        const yValue = document.getElementById('y-value');
+
+        const containerRect = container.getBoundingClientRect();
+        const sliderRect = slider.getBoundingClientRect();
+
+        // スライダーを中央に配置
+        // const initialX = (containerRect.width - sliderRect.width) / 2;
+        const initialX = 0;
+        const initialY = (containerRect.height - sliderRect.height) / 2;
+        slider.style.left = `${initialX}px`;
+        slider.style.top = `${initialY}px`;
+        let x_buf;
+        let y_buf;
+        
+        x_buf = Math.round((initialX / (containerRect.width - sliderRect.width)) * 100);
+        y_buf = Math.round((initialY / (containerRect.height - sliderRect.height)) * 100);
+        
+        y_buf = y_control(y_buf);
+        
+        // 初期値を更新（パーセンテージ）
+        xValue.textContent = `${x_buf}%`;
+        yValue.textContent = y_buf[0];
+        
+        setHampMode(CONNECTION_KEY);
+        setHampVelocity(CONNECTION_KEY, x_buf);
+        setSlide(CONNECTION_KEY, y_buf[1], y_buf[2]);
+
+        let isDragging = false;
+        
+        function updatePosition(x, y) {
+            // 位置を制限する
+            x = Math.max(0, Math.min(containerRect.width - sliderRect.width, x));
+            y = Math.max(0, Math.min(containerRect.height - sliderRect.height, y));
+            
+            // スライダーの位置を更新
+            slider.style.left = `${x}px`;
+            slider.style.top = `${y}px`;
+            
+            x_buf = Math.round((x / (containerRect.width - sliderRect.width)) * 100);
+            y_buf = Math.round((y / (containerRect.height - sliderRect.height)) * 100);
+            
+            y_buf = y_control(y_buf);
+            
+            // X、Y値を更新（パーセンテージ）
+            xValue.textContent = `${x_buf}%`;
+            yValue.textContent = y_buf[0];
+            
+        }
+        
+        function y_control(y) {
+            let buf;
+            // 下部
+            if (y > 50) {
+                buf = 100 - (y - 50) * 2;
+                if (buf == 0) {
+                    buf = 1;
+                };
+                buf = [`Lower ${buf}%`, 0, buf];
+            
+            // 上部
+            } else if (y < 50) {
+                buf = 100 - (50 - y) * 2;
+                if (buf == 0) {
+                    buf = 1;
+                };
+                buf = [`Upper ${buf}%`, 100 - buf, 100];
+            // フルストローク
+            } else {
+                buf = [`Full stroke 100%`, 0, 100];
+            }
+            return buf;
+        };
+
+        function onMouseMove(event) {
+            if (isDragging) {
+                const x = event.clientX - containerRect.left - sliderRect.width / 2;
+                const y = event.clientY - containerRect.top - sliderRect.height / 2;
+                updatePosition(x, y);
+            }
+        }
+
+        function onMouseDown(event) {
+            isDragging = true;
+        }
+
+        function onMouseUp(event) {
+            isDragging = false;
+            setHampVelocity(CONNECTION_KEY, x_buf);
+            setSlide(CONNECTION_KEY, y_buf[1], y_buf[2]);
+        }
+
+        // スライダーのドラッグを設定
+        slider.addEventListener('mousedown', onMouseDown);
+        document.addEventListener('mouseup', onMouseUp);
+        document.addEventListener('mousemove', onMouseMove);
+        
+    });
+    
+    function setHampMode(CONNECTION_KEY) {
+        fetch("https://www.handyfeeling.com/api/handy/v2/mode", {
+            headers: {
+                "accept": "application/json",
+                "Content-Type": "application/json",
+                "X-Connection-Key": CONNECTION_KEY
+            },
+            method: "PUT",
+            body: JSON.stringify({
+                "mode": 0
+            })
+        })
+    }
+    
+    function startHamp(CONNECTION_KEY) {
+        fetch("https://www.handyfeeling.com/api/handy/v2/hamp/start", {
+            headers: {
+                "accept": "application/json",
+                "Content-Type": "application/json",
+                "X-Connection-Key": CONNECTION_KEY
+            },
+            method: "PUT",
+        })
+    }
+    
+    function stopHamp(CONNECTION_KEY) {
+        fetch("https://www.handyfeeling.com/api/handy/v2/hamp/stop", {
+            headers: {
+                "accept": "application/json",
+                "Content-Type": "application/json",
+                "X-Connection-Key": CONNECTION_KEY
+            },
+            method: "PUT",
+        })
+    }
+    
+    function setHampVelocity(CONNECTION_KEY, VELOCITY) {
+        fetch("https://www.handyfeeling.com/api/handy/v2/hamp/velocity", {
+            headers: {
+                "accept": "application/json",
+                "Content-Type": "application/json",
+                "X-Connection-Key": CONNECTION_KEY
+            },
+            method: "PUT",
+            body: JSON.stringify({
+                "velocity": VELOCITY
+            })
+        })
+    }
+    
+    function setSlide(CONNECTION_KEY, MIN, MAX) {
+        fetch("https://www.handyfeeling.com/api/handy/v2/slide", {
+            headers: {
+                "accept": "application/json",
+                "Content-Type": "application/json",
+                "X-Connection-Key": CONNECTION_KEY
+            },
+            method: "PUT",
+            body: JSON.stringify({
+                "min": MIN,
+                "max": MAX
+            })
+        })
+    }
+</script>
+
+</body>
+</html>
